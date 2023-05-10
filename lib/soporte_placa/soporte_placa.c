@@ -1,8 +1,8 @@
 #include <soporte_placa.h>
-#include <stm32f1xx.h>
+#include <stm32f1xx.h> // define todas las constantes y funciones , libreria cmsis
 #include <stdint.h>
 
-// Implementación
+// Implementación -----------------------------------------------------------
 
 /**
  * @brief Rutina de servicio de interrupción de timer SysTick
@@ -23,6 +23,7 @@ void SP_init(void){
     // https://arm-software.github.io/CMSIS_5/Core/html/group__SysTick__gr.html#gabe47de40e9b0ad465b752297a9d9f427
     SysTick_Config(cuentas_por_milisgundo); // Configura SysTick y la interrupción
 }
+
 
 
 /* Temporización */
@@ -52,16 +53,29 @@ void SysTick_Handler(void){
 
 /* GPIO */
 
+// Datos necesario para trabajar en un pin 
+// Para configurar 
+// Tiene dos datos : puerto (puntero) y numero de Pin (entre 0 y 15)
 typedef struct Pin{
     GPIO_TypeDef * puerto;
     int nrPin;
 }Pin;
 
-static Pin const pines[SP_HPIN_LIMITE] = {
-    [SP_PB9]={.puerto=GPIOB,.nrPin=9},
+
+// Tabla : esta definida los datos necesarios para trabajar con el pin 
+// Esto se llama indireccion
+//Inicializador designado ( a la derecha del igual {pin identificado por el numero ,Valor})
+//.puerto=GPIOB (lo que hace esto es asignarle el ese valor al puerto )
+//nrPin=9 le asigna es el valor 
+// ambos son convinaciones de arreglo y estructura
+
+static Pin const pines[SP_NUM_PINES] = {
+    [SP_PB9]={.puerto=GPIOB,.nrPin=9}, 
     [SP_PC13]={.puerto=GPIOC,.nrPin=13}
 };
 
+
+// P1:
 /**
  * @brief Obtiene un puntero a Pin a partir de su handle
  * 
@@ -71,9 +85,13 @@ static Pin const pines[SP_HPIN_LIMITE] = {
 static Pin const * pinDeHandle(SP_HPin hPin){
     return &pines[hPin];
 }
+
+
+
+//P2:
 /**
- * @brief Calcula la posición en del bit de habilitación
- * del puerto en APB2_ENR a partir de su dirección en memoria.
+ * @brief Calcula la posición del bit de habilitación
+ * del puerto en APB2ENR a partir de su dirección en memoria.
  */
 
 /**
@@ -81,13 +99,16 @@ static Pin const * pinDeHandle(SP_HPin hPin){
  * @note Debe ser llamada antes de intentar usar el puerto
  * por primera vez.
  * @param puerto Puntero al puerto GPIO 
- * @return uint32_t Máscara de habilitación de reloj
  */
 static void habilitaRelojPuerto(GPIO_TypeDef const *puerto){
-    int const offset_habilitacion = (((uint32_t)(puerto) >> 10) & 0xF);
-    RCC->APB2ENR |= 1 << offset_habilitacion;
+    enum{
+        BYTES_PERIFERICO_APB2 = (uintptr_t)GPIOB - (uintptr_t)GPIOA
+    };
+    int const indice_en_bus_APB2 = ((uintptr_t)(puerto) - (uintptr_t)APB2PERIPH_BASE) / BYTES_PERIFERICO_APB2;
+    RCC->APB2ENR |= 1 << indice_en_bus_APB2;
 }
 // ... continúa implementación
+
 
 /**
  * @brief Escribe los bits de modo en la posición adecuada
@@ -102,12 +123,15 @@ static void config_modo(Pin const *pin, int bits_modo){
     uint32_t const mascara = 0xF; // 4 bits de configuración
     if (pin->nrPin < 8){
         pin->puerto->CRL =  (pin->puerto->CRL & ~(mascara << offset))
-                          | ((bits_modo & mascara)<<offset); 
+                          | ((bits_modo & mascara) << offset); 
     }else{ // 8..15
-        pin->puerto->CRH =  (pin->puerto->CRL & ~(mascara << offset))
+        pin->puerto->CRH =  (pin->puerto->CRH & ~(mascara << offset))
                           | ((bits_modo & mascara)<<offset); 
     }
 }
+
+
+
 
 void SP_Pin_setModo(SP_HPin hPin,SP_Pin_Modo modo){
     // Ver Manual de referencia de la familia sec. 9.2.1/.2
@@ -133,9 +157,10 @@ void SP_Pin_setModo(SP_HPin hPin,SP_Pin_Modo modo){
          */
         SALIDA_2MHz_OPEN_DRAIN = 0b0110
     };
-    if(hPin >= SP_HPIN_LIMITE) return; // debiera generar un error
-    Pin const *pin = pinDeHandle(hPin);
-    __disable_irq();
+    if(hPin >= SP_NUM_PINES) return; // debiera generar un error
+    Pin const *pin = pinDeHandle(hPin); // recuperaba puntero
+    __disable_irq(); // Deshabita las interrupciones
+
     habilitaRelojPuerto(pin->puerto);
     switch (modo)
     {
@@ -143,10 +168,13 @@ void SP_Pin_setModo(SP_HPin hPin,SP_Pin_Modo modo){
         config_modo(pin,ENTRADA_FLOTANTE);
     break;case SP_PIN_ENTRADA_PULLUP:
         config_modo(pin,ENTRADA_PULLUP_PULLDN);
-        pin->puerto->BSRR = 1 << pin->nrPin;
+        //pin->puerto->ODR |= 1 << pin->nrPin; // Necesita deshabilitar interrupciones
+        pin->puerto->BSRR = 1 << pin->nrPin; // NO necesita deshabilitar interrupciones (Pone en 1)
     break;case SP_PIN_ENTRADA_PULLDN:
         config_modo(pin,ENTRADA_PULLUP_PULLDN);
-        pin->puerto->BRR = 1 << pin->nrPin;
+        //pin->puerto->ODR &= ~(1 << pin->nrPin); // Necesita deshabilitar interrupciones
+        //pin->puerto->BSRR = 1 << (pin->nrPin + 16); // NO necesita deshabilitar interrupciones
+        pin->puerto->BRR = 1 << pin->nrPin; // NO necesita deshabilitar interrupciones (Esto es escribir) (pone 0)
     break;case SP_PIN_SALIDA:
         config_modo(pin,SALIDA_2MHz);
     break;case SP_PIN_SALIDA_OPEN_DRAIN:
@@ -158,9 +186,24 @@ void SP_Pin_setModo(SP_HPin hPin,SP_Pin_Modo modo){
     __enable_irq();
 }
 
+//Recupero el puntero, estructura pin donde estan los datos necesarios para trabajar 
+//con el pin (configurar, leerlo, e, etc)
+
 bool SP_Pin_read(SP_HPin hPin){
+   
+    Pin const *pin = pinDeHandle(hPin);// Recuperamos el puntero
+    
+    return  (pin->puerto->IDR & (1 << pin->nrPin)); // retorna la comparacion entre el estado del IDR y pone un 1 en el lugar correspondiente del nrde pin (lo desplaza)
 }
 
 void SP_Pin_write(SP_HPin hPin, bool valor){
+   Pin const *pin = pinDeHandle(hPin); // recuperaba puntero
+
+    if(valor){
+        pin->puerto->BSRR =(1 << pin->nrPin); // NO necesita deshabilitar interrupciones (Pone en 1)
+    }else{
+        pin->puerto->BRR = (1 << pin->nrPin); // NO necesita deshabilitar interrupciones (Esto es escribir) (pone 0)
+    }
+   
 }
 

@@ -1,10 +1,10 @@
 #ifndef SOPORTE_PLACA_H
-#define SOPORTE_PLACA_H
+#define SOPORTE_PLACA_H // Definicion de constantes 
 
 #include <stdbool.h>
 #include <stdint.h>
 
-// Declaraciones
+// Declaraciones---------------------------------------------------------------------------------------
 // Espacio de nombres: SP_
 
 /**
@@ -13,17 +13,28 @@
  * 
  */
 enum SP_Pines{
-    SP_PB9,
+    SP_PB9, 
     SP_PC13,
-    SP_LED = SP_PC13, // LED verde integrado en la placa, pin PC13 
-    SP_HPIN_LIMITE
+    SP_NUM_PINES
 };
 
+// Esto es un alias, o especial  
+//Tiene una funcion especial
+
+enum SP_PinesEspecial{
+    SP_PULSADOR = SP_PB9, // NO esta integrado a la placa, esta conectado a ella
+    SP_LED = SP_PC13, // LED verde integrado en la placa, pin PC13 
+};
+
+//--------------------------------------------------------------------------------------
 /**
  * @brief Handle que representa un objeto Pin.
  * Toma valores de las constantes SP_Pines
+ * @note: Es el indice en una tabla 
  */
-typedef int SP_HPin;
+typedef unsigned SP_HPin; 
+
+
 
 /**
  * @brief Definición de modo de operación de un Pin
@@ -37,6 +48,7 @@ typedef enum SP_Pin_Modo{
     SP_PIN_SALIDA_OPEN_DRAIN // Salida con drenador abierto
 }SP_Pin_Modo;
 
+// PARTE 3 -------------------------------------------------------------------------------------------------------------------
 /**
  * @brief Configura el modo de un pin
  * 
@@ -44,6 +56,9 @@ typedef enum SP_Pin_Modo{
  * @param modo Modo a configurar
  */
 void SP_Pin_setModo(SP_HPin hPin,SP_Pin_Modo modo);
+
+
+// PARTE 4 --------------------------------------------------------------------------------------------
 
 /**
  * @brief Lee el buffer de entrada de un Pin
@@ -53,6 +68,8 @@ void SP_Pin_setModo(SP_HPin hPin,SP_Pin_Modo modo);
  * @return false Entrada BAJA
  */
 bool SP_Pin_read(SP_HPin hPin);
+
+// PARTE 5 -------------------------------------------------------------------------------------------------------------------
 
 /**
  * @brief Escribe el buffer de salida de un Pin
